@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MCC Dashboard</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            background: rgb(227,215,218);
+            background: linear-gradient(90deg, rgba(227,215,218,1) 0%, rgba(223,2,32,1) 48%, rgba(252,228,232,1) 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 100px;
+        }
+        .header img {
+            height: 80px;
+            padding: 10px;
+        }
+        .header-content {
+            text-align: center;
+            position: relative;
+        }
+        .header-content h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .header-content a {
+            color: white;
+            text-decoration: none;
+            background-color: #b71c1c;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+        .header-content a:hover {
+            background-color: #9a1b1b;
+        }
+        .container {
+            margin: 50px auto;
+            width: 40%;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        .login-button {
+            background-color: #d32f2f;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .login-button:hover {
+            background-color: #b71c1c;
+        }
+        .footer {
+            margin-top: 20px;
+            background-color: #d32f2f;
+            color: white;
+            padding: 10px;
+        }
+        input[type="text"], input[type="password"] {
+            width: 80%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .status {
+            font-weight: bold;
+        }
+        .status.connected {
+            color: green;
+        }
+        .status.disconnected {
+            color: red;
+        }
+        .form-group {
+            text-align: left;
+            margin: 10px 0;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 90%;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="robis_logo.png" alt="Robis">
+        <div class="header-content">
+            <h1>Login</h1>
+            <a href="index.html">Home</a>
+        </div>
+        <img src="motherson_logo.png" alt="Motherson">
+    </div>
+    <div class="container">
+        <h2>Login in to Mold</h2>
+        <form onsubmit="return false;">
+            <input type="text" id="username" placeholder="Username" required><br>
+            <input type="password" id="moldPassword" placeholder="Password" required><br>
+            <button class="login-button" type="submit" onclick="verifyLogin()">Login</button>
+        </form>
+        <p id="loginStatus" class="status disconnected">Not Logged In</p>
+        <p id="connectionStatus" class="status disconnected">Status: Not Connected</p>
+    </div>
+    <div class="container" id="actionsCard" style="display: none;">
+        <h2>Actions</h2>
+        <button onclick="resetCount()">Reset Cycle Count</button>
+        <hr>
+        <div class="form-group">
+            <label for="newMoldName">New Mold Name:</label>
+            <input type="text" id="newMoldName" placeholder="Enter New Mold Name">
+        </div>
+        <div class="form-group">
+            <label for="newPassword">New Password:</label>
+            <input type="password" id="newPassword" placeholder="Enter New Password">
+        </div>
+        <button onclick="updateMold()">Update Mold Details</button>
+    </div>
+    <div class="footer">
+        <p>&copy; 2025 MCC System | Powered by Motherson Robis</p>
+    </div>
+
+    <script>
+        const broker = "wss://7f99d7fceebf4815b29b1fa9795520ca.s1.eu.hivemq.cloud:8884/mqtt";
+        const username = "Mold_cycle_count";
+        const password = "Moldcycle123";
+
+        const client = mqtt.connect(broker, {
+            username: username,
+            password: password
+        });
+
+        let loggedInMold = null;
+
+        client.on("connect", () => {
+            console.log("Connected to MQTT broker");
+            client.subscribe("001/systemstate", (err) => {
+                if (!err) {
+                    console.log("Subscribed to system state topic");
+                }
+            });
+            client.subscribe("001/credentials/access", (err) => {
+                if (!err) {
+                    console.log("Subscribed to login access topic");
+                }
+            });
+        });
+
+        client.on("message", (topic, message) => {
+            if (topic === "001/systemstate") {
+                const systemState = message.toString();
+                const connectionStatus = document.getElementById('connectionStatus');
+                connectionStatus.textContent = `Status: ${systemState}`;
+                connectionStatus.className = systemState === 'Connected to HiveMQ!' ? 'status connected' : 'status disconnected';
+            }
+            if (topic === "001/credentials/access") {
+                const access = message.toString();
+                const loginStatus = document.getElementById('loginStatus');
+                if (access === '1') {
+                    loggedInMold = true;
+                    loginStatus.textContent = 'Login Successful!';
+                    loginStatus.className = 'status connected';
+                    document.getElementById('actionsCard').style.display = 'block';
+                } else {
+                    loggedInMold = false;
+                    loginStatus.textContent = 'Login Failed!';
+                    loginStatus.className = 'status disconnected';
+                    document.getElementById('actionsCard').style.display = 'none';
+                }
+            }
+        });
+
+        function verifyLogin() {
+            const username = document.getElementById('username').value;
+            const moldPassword = document.getElementById('moldPassword').value;
+            client.publish("001/login/username", username);
+            client.publish("001/login/password", moldPassword);
+        }
+
+        function resetCount() {
+            if (loggedInMold) {
+                client.publish("001/control/reset", "reset count");
+                console.log("Reset command sent");
+            }
+        }
+
+        function updateMold() {
+            if (loggedInMold) {
+                const newMoldName = document.getElementById('newMoldName').value;
+                const newPassword = document.getElementById('newPassword').value;
+                client.publish("001/config/update/username", newMoldName);
+                client.publish("001/config/update/password", newPassword);
+                alert(`Mold details updated:
+                    New Name: ${newMoldName || 'No change'}
+                    New Password: ${newPassword || 'No change'}`);
+                
+                location.reload(); // Refresh the page after updating mold details
+            }
+        }
+    </script>
+</body>
+</html>
