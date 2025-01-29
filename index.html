@@ -14,7 +14,6 @@
             padding: 0;
         }
         .header {
-            background: rgb(227,215,218);
             background: linear-gradient(90deg, rgba(227,215,218,1) 0%, rgba(223,2,32,1) 48%, rgba(252,228,232,1) 100%);
             color: #ffffff;
             padding: 20px;
@@ -42,10 +41,9 @@
             box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
         }
         .dropdown {
-            text-align: left;
-            margin-bottom: 20px;
             display: flex;
             align-items: center;
+            margin-bottom: 20px;
         }
         .dropdown label {
             font-size: 18px;
@@ -60,8 +58,8 @@
             cursor: pointer;
             border-radius: 5px;
             transition: background 0.3s;
-            margin-left: 20px; /* Added margin to space the button */
-            text-decoration: none; /* Remove underline */
+            margin-left: 20px;
+            text-decoration: none;
         }
         .login-button:hover {
             background-color: #b71c1c;
@@ -72,6 +70,9 @@
             color: white;
             padding: 10px;
             text-align: center;
+        }
+        canvas {
+            margin-top: 20px;
         }
         canvas {
             margin-top: 20px;
@@ -105,9 +106,9 @@
         <div class="dropdown">
             <label for="moldSelect">Select Mold:</label>
             <select id="moldSelect" onchange="updateSelectedMold()">
-                <option value="M001">M001</option>
-                <option value="M002">M002</option>
-                <option value="M003">M003</option>
+                <option value="001">M001</option>
+                <option value="002">M002</option>
+                <option value="003">M003</option>
             </select>
             <a href="moldlogin.html" class="login-button">Mold Login</a>
         </div>
@@ -148,104 +149,95 @@
         const broker = "wss://7f99d7fceebf4815b29b1fa9795520ca.s1.eu.hivemq.cloud:8884/mqtt";
         const username = "Mold_cycle_count";
         const password = "Moldcycle123";
+        const client = mqtt.connect(broker, { username, password });
 
-        const client = mqtt.connect(broker, {
-            username: username,
-            password: password
+        let selectedMold = "001";
+        let labels = JSON.parse(localStorage.getItem(`${selectedMold}_labels`)) || [];
+        let dataPoints = JSON.parse(localStorage.getItem(`${selectedMold}_dataPoints`)) || [];
+
+        const ctx = document.getElementById('moldChart').getContext('2d');
+        const moldChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Cycle Count',
+                    data: dataPoints,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    fill: true,
+                    tension: 0.3,
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { title: { display: true, text: 'Time' } },
+                    y: { title: { display: true, text: 'Cycle Count' }, ticks: { stepSize: 1000 } }
+                }
+            }
         });
 
-        let selectedMold = "M001"; // Default mold
-        const timeLabels = [];
-
         client.on("connect", () => {
-            console.log("Connected to MQTT broker");
-            client.subscribe("001/cyclecount", (err) => {
+            console.log("Connected to MQTT");
+            client.subscribe(`${selectedMold}/cyclecount`,(err) => {
                 if (!err) {
-                    console.log("Subscribed to cycle count topic");
+                    console.log(`Subscribed to ${selectedMold}/cyclecount`);
                 }
             });
         });
 
         client.on("message", (topic, message) => {
-            if (topic === "001/cyclecount") {
-                const cycleCount = message.toString();
-                const currentTime = new Date().toLocaleString();
-                console.log(`Received cycle count: ${cycleCount} at ${currentTime}`);
+    const cycleCount = parseInt(message.toString());
+    const currentTime = new Date().toLocaleTimeString();
 
-                if (selectedMold === "M001") {
-                    document.getElementById('countM001').textContent = cycleCount;
-                    document.getElementById('timeM001').textContent = currentTime;
-                } else if (selectedMold === "M002") {
-                    document.getElementById('countM002').textContent = cycleCount;
-                    document.getElementById('timeM002').textContent = currentTime;
-                } else if (selectedMold === "M003") {
-                    document.getElementById('countM003').textContent = cycleCount;
-                    document.getElementById('timeM003').textContent = currentTime;
-                }
-
-                // Store the last known values in local storage
-                localStorage.setItem('lastCycleCount', cycleCount);
-                localStorage.setItem('lastUpdatedTime', currentTime);
-
-                if (selectedMold === "M001" && topic === "001/cyclecount") {
-                    updateGraph(currentTime, cycleCount);
-                }
+    if (selectedMold === "001") {
+        document.getElementById('countM001').textContent = cycleCount;
+                document.getElementById('timeM001').textContent = currentTime;
+            } else if (selectedMold === "002") {
+                document.getElementById('countM002').textContent = cycleCount;
+                document.getElementById('timeM002').textContent = currentTime;
+            } else if (selectedMold === "003") {
+                document.getElementById('countM003').textContent = cycleCount;
+                document.getElementById('timeM003').textContent = currentTime;
             }
+
+            // Store updated values in localStorage
+            localStorage.setItem(`lastCycleCount_${selectedMold}`, cycleCount);
+            localStorage.setItem(`lastUpdatedTime_${selectedMold}`, currentTime);
+
+            // Update chart
+            labels.push(currentTime);
+            dataPoints.push(cycleCount);
+            if (labels.length > 10) {
+                labels.shift();
+                dataPoints.shift();
+            }
+            localStorage.setItem(`${selectedMold}_labels`, JSON.stringify(labels));
+            localStorage.setItem(`${selectedMold}_dataPoints`, JSON.stringify(dataPoints));
+            moldChart.update();
         });
+
 
         function updateSelectedMold() {
+            let prevMold = selectedMold;
             selectedMold = document.getElementById('moldSelect').value;
-        }
-
-        const ctx = document.getElementById('moldChart').getContext('2d');
-        let moldChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Mold Cycle Count',
-                    data: [],
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    fill: true,
-                }],
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { display: true },
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Time' }
-                    },
-                    y: {
-                        title: { display: true, text: 'Cycle Count' }
-                    }
-                }
-            },
-        });
-
-        function updateGraph(time, cycleCount) {
-            timeLabels.push(time);
-            moldChart.data.labels.push(time);
-            moldChart.data.datasets[0].data.push(cycleCount);
-            if (timeLabels.length > 10) {
-                timeLabels.shift();
-                moldChart.data.labels.shift();
-                moldChart.data.datasets[0].data.shift();
-            }
+            client.unsubscribe(`${prevMold}/cyclecount`);
+            client.subscribe(`${selectedMold}/cyclecount`);
+            labels = JSON.parse(localStorage.getItem(`${selectedMold}_labels`)) || [];
+            dataPoints = JSON.parse(localStorage.getItem(`${selectedMold}_dataPoints`)) || [];
+            moldChart.data.labels = labels;
+            moldChart.data.datasets[0].data = dataPoints;
             moldChart.update();
         }
 
-        window.onload = function() {
-            const lastCycleCount = localStorage.getItem('lastCycleCount') || '0';
-            const lastUpdatedTime = localStorage.getItem('lastUpdatedTime') || 'Never';
-            document.getElementById('countM001').textContent = lastCycleCount;
-            document.getElementById('timeM001').textContent = lastUpdatedTime;
-
-            // Initialize the graph with the last known cycle count
-            updateGraph(lastUpdatedTime, lastCycleCount);
+        window.onload = function () {
+            ["001", "002", "003"].forEach(moldID => {
+                const lastCycleCount = localStorage.getItem(`lastCycleCount_${moldID}`) || '0';
+                const lastUpdatedTime = localStorage.getItem(`lastUpdatedTime_${moldID}`) || 'Never';
+                document.getElementById(`countM${moldID}`).textContent = lastCycleCount;
+                document.getElementById(`timeM${moldID}`).textContent = lastUpdatedTime;
+            });
         };
     </script>
 </body>
